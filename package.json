@@ -1,0 +1,70 @@
+{
+  "name": "pulsar-hover",
+  "version": "1.0.0",
+  "description": "Contextual hints for Pulsar",
+  "source": "src/index.js",
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "rollup -c rollup.config.mjs",
+    "watch": "rollup --watch -c rollup.config.mjs"
+  },
+  "activationHooks": [
+    "core:loaded-shell-environment"
+  ],
+  "repository": "https://github.com/savetheclocktower/pulsar-hover",
+  "license": "ISC",
+  "engines": {
+    "atom": ">=1.0.0 <2.0.0"
+  },
+  "keywords": [],
+  "author": "Andrew Dupont",
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.3",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "@rollup/plugin-typescript": "^12.1.2",
+    "@types/atom": "^1.40.18",
+    "atom-ide-base": "^3.3.0",
+    "rollup": "^4.40.0",
+    "tslib": "^2.8.1",
+    "typescript": "^5.8.3"
+  },
+  "configSchema": {
+    "showOverlayOnCursorMove": {
+      "title": "Show on Cursor Move",
+      "description": "When enabled, the hover overlay will appear when your cursor rests on a symbol. When disabled, the hover overlay won’t appear for the token under the cursor until you invoke the **Pulsar Hover: Toggle** command.",
+      "type": "boolean",
+      "default": false
+    },
+    "showOverlayOnMouseMove": {
+      "title": "Show on Mouse Move",
+      "description": "When enabled, the hover overlay will appear when the mouse pointer rests on a symbol.",
+      "type": "boolean",
+      "default": true
+    },
+    "hoverTime": {
+      "title": "Hover Delay Time",
+      "description": "How long (in milliseconds) to wait before asking for hover information on mouse or cursor rest; also how long for the hover overlay to linger after mouse or cursor movement.",
+      "type": "number",
+      "default": 250
+    }
+  },
+  "providedServices": {
+    "datatip": {
+      "versions": {
+        "0.1.0": "provideDatatipService"
+      }
+    }
+  },
+  "consumedServices": {
+    "hover": {
+      "versions": {
+        "0.1.0": "consumeHover"
+      }
+    }
+  },
+  "dependencies": {
+    "dompurify": "^3.2.5",
+    "marked": "^4.3.0"
+  }
+}

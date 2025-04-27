@@ -1,0 +1,39 @@
+@import 'ui-variables';
+
+.hover-overlay-view {
+  font-family: @font-family;
+  max-width: 50vw;
+  min-width: 200px;
+
+  & > :first-child {
+    margin-top: 0;
+  }
+
+  & > :last-child {
+    margin-bottom: 0;
+  }
+
+  pre {
+    // Override the standard behavior for `pre` elements in Pulsar so that
+    // lines don't break in the middle of a word.
+    word-break: normal;
+  }
+
+  atom-text-editor {
+    // only show scrollbars on hover
+    .scrollbars-visible-always & {
+      .vertical-scrollbar,
+      .horizontal-scrollbar {
+        visibility: hidden;
+      }
+    }
+    .scrollbars-visible-always &:hover {
+      .vertical-scrollbar,
+      .horizontal-scrollbar {
+        visibility: visible;
+      }
+    }
+    user-select: auto;
+  }
+
+}

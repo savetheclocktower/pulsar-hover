@@ -1,0 +1,4 @@
+"*":
+  "pulsar-ide-typescript":
+    "codeFormat":
+      "enable": true
