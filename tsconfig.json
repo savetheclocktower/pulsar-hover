@@ -18,8 +18,8 @@
   },
   "include": ["src/**/*", "types/**/*"],
   "exclude": ["node_modules", "lib"],
-  "typings": ["src/*.d.ts"],
   "typeRoots": [
+    "./node_modules/@types",
     "./types"
   ]
 }
