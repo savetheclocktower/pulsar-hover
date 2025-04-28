@@ -22,6 +22,17 @@
     // Override the standard behavior for `pre` elements in Pulsar so that
     // lines don't break in the middle of a word.
     word-break: normal;
+
+    // HACK: On the default One Dark/Light themes, there is scarcely any space
+    // between a `pre` and its next child because all `pre`s have
+    // `margin-bottom` of `0`. This will improve the look of the overlay in
+    // cases where documentation follows the code example.
+    //
+    // This should be temporary until this issue can be addressed in the
+    // builtin UI themes.
+    & + * {
+      margin-top: 0.5rem;
+    }
   }
 
   atom-text-editor {

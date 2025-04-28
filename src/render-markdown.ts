@@ -84,17 +84,23 @@ function unescapeHTML(str: string) {
     .replace(/&#039;/g, "'");
 }
 
-// All the properties in `T` whose values are strings.
+/**
+ * All the properties in `T` whose values are strings.
+ */
 type StringPropertyNames<T> = {
   [K in keyof T]: T[K] extends string ? K : never
 }[keyof T];
 
-// All the properties in `T` whose values aren't readonly.
+/**
+ * All the properties in `T` whose values aren't readonly.
+ */
 type WritablePropertyNames<T> = {
   [K in keyof T]: T extends { readonly [P in K]: T[K] } ? never : K
 }[keyof T];
 
-// All the writable string properties in `CSSStyleDeclaration`.
+/**
+ * All the writable string properties in `CSSStyleDeclaration`.
+ */
 type WritableStringCSSProperties = Pick<
   CSSStyleDeclaration,
   StringPropertyNames<CSSStyleDeclaration> & WritablePropertyNames<CSSStyleDeclaration>
@@ -120,8 +126,8 @@ export async function renderOverlayContent({
 }: RenderMarkdownFragmentOptions) {
   let html = await renderMarkdown(markdown);
   let fragment = RANGE.createContextualFragment(`
-    <atom-panel class="padded ${containerClassName}">
-      <div class="inset-panel ${contentClassName}">
+    <atom-panel class="${containerClassName}">
+      <div class="inset-panel padded ${contentClassName}">
         ${html}
       </div>
     </atom-panel>
