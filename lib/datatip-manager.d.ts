@@ -8,8 +8,8 @@ export default class OverlayManager {
     editorView: TextEditorElement | null;
     editorSubscriptions: CompositeDisposable | null;
     overlayMarkerDisposables: CompositeDisposable | null;
-    showOverlayOnCursorMove: boolean;
-    showOverlayOnMouseMove: boolean;
+    showOnCursorMove: boolean;
+    showOnMouseMove: boolean;
     currentMarkerRange: Range | null;
     hoverTime: number;
     _onMouseMove: (event: MouseEvent) => void;
