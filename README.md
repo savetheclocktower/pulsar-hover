@@ -24,7 +24,9 @@ This package also provides the Atom IDE `signature-help` service so it can offer
 
 In order to do this job for a given language, it needs [a consumer of `signature-help`](https://web.pulsar-edit.dev/packages?serviceType=consumed&service=signature-help) that operates on files of that type.
 
-By default, this signature help will appear automatically when appropriate while you type, but you can configure it to appear only ater the invocation of a command instead.
+By default, this signature help will appear automatically when appropriate while you type, but you can configure it to appear only after the invocation of a command instead.
+
+(Eventually I’d like to create a new service to replace `signature-help` much like `hover` is designed to replace `datatip`. But that’s lower on the priority list.)
 
 ## Commands
 
