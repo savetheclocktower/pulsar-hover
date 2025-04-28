@@ -9,14 +9,6 @@ import {
   CursorPositionChangedEvent
 } from 'atom';
 
-declare module 'atom' {
-  interface TextEditor {
-    getElement(): HTMLElement
-  }
-  interface TextEditorElement {
-    getWidth(): number
-  }
-}
 
 import type { Datatip, DatatipProvider, MarkedString } from 'atom-ide-base';
 

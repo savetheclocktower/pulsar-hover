@@ -16,7 +16,10 @@
     "sourceMap": true,
     "moduleResolution": "bundler"
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "types/**/*"],
   "exclude": ["node_modules", "lib"],
-  "typings": ["src/*.d.ts"]
+  "typings": ["src/*.d.ts"],
+  "typeRoots": [
+    "./types"
+  ]
 }
