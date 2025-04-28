@@ -2,6 +2,10 @@
 
 Contextual hints for Pulsar.
 
+<p>
+  <img width="520" alt="pulsar-hover screenshot" src="./docs/screenshot.png" />
+</p>
+
 Designed as a replacement for both `atom-ide-datatip` and `atom-ide-signature-help`.
 
 ## Services
@@ -46,3 +50,20 @@ How long (in milliseconds) to wait before asking for hover information on mouse 
 ### `pulsar-hover.signatureHelp.showOverlayWhileTyping`
 
 Whether to show the signature help overlay automatically while the user types function parameters. When enabled, the appropriate overlay should show for each of the parameters of a given function and should close once you’re done typing the function. When disabled, you must invoke the `pulsar-hover:toggle-signature-help` command to show/hide the overlay when appropriate.
+
+## Customization
+
+The overlays rely heavily on your UI theme’s default styles for panels. But everything about the overlays’ appearance can be customized by [editing your user stylesheet](https://docs.pulsar-edit.dev/customizing-pulsar/style-tweaks/).
+
+Here’s a simplified version of the HTML for the overlay in the screenshot:
+
+```html
+<atom-panel class="hover-overlay-view-container">
+  <div class="inset-panel padded hover-overlay-view">
+    <pre><code>type WritableStringCSSProperties = {}</code></pre>
+    <p>All the writable string properties in <code>CSSStyleDeclaration</code>.</p>
+  </div>
+</atom-panel>
+```
+
+Thanks.
