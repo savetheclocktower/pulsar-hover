@@ -65,5 +65,3 @@ Here’s a simplified version of the HTML for the overlay in the screenshot:
   </div>
 </atom-panel>
 ```
-
-Thanks.
