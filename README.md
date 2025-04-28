@@ -16,7 +16,7 @@ This package can show most datatips from [packages that consume Atom IDE’s `da
 
 Because the `datatip` service is a bit bloated and (strangely) inverts the consumer/provider relationship, this package prefers a new service called `hover`. When searching for a provider for a particular editor pane, [`hover` providers](https://web.pulsar-edit.dev/packages?serviceType=provided&service=hover) will be given priority over `datatip` consumers.
 
-(This service may not yet have _any_ providers at time of release, but some will emerge after this service is added to `@savetheclocktower/atom-languageclient`).
+(The `hover` service may not yet have _any_ providers at time of release, but some will emerge after the provider implementation is added to `@savetheclocktower/atom-languageclient`).
 
 ### Signature help
 
