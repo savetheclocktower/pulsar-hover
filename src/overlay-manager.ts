@@ -555,9 +555,7 @@ export default class OverlayManager {
 
     let context = buildSignatureHelpContext('invoked', { isRetrigger: false });
 
-    // await this.showSignatureHelp(provider, editor, position, context);
     await this.showSignatureHelp(provider, editor, position, context);
-
   }
 
   mountOverlayWithMarker(
