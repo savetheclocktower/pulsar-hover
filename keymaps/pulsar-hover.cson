@@ -1,5 +1,7 @@
 ".platform-darwin atom-text-editor":
   "cmd-alt-h": "pulsar-hover:toggle"
+  "cmd-alt-j": "pulsar-hover:toggle-signature-help"
 
 ".platform-win32 atom-text-editor, .platform-linux atom-text-editor":
   "ctrl-alt-h": "pulsar-hover:toggle"
+  "ctrl-alt-j": "pulsar-hover:toggle-signature-help"

@@ -1,11 +1,15 @@
 import * as marked from 'marked';
 import DOMPurify from 'dompurify';
-import { Disposable, Grammar, TextBuffer } from 'atom';
+import { Grammar, TextBuffer } from 'atom';
 
+marked.setOptions({ breaks: false })
 
 export type DOMPurifyConfig = Omit<DOMPurify.Config, "RETURN_DOM" | "RETURN_DOM_FRAGMENT" | "RETURN_TRUSTED_TYPE"> & { PARSER_MEDIA_TYPE: DOMParserSupportedType | null }
 
 function grammarForLanguageString (languageString: string) {
+  if (languageString.includes('.')) {
+    return atom.grammars.grammarForScopeName(languageString);
+  }
   return (
     atom.grammars.treeSitterGrammarForLanguageString(languageString) ??
     atom.grammars.grammarForScopeName(`source.${languageString}`)
@@ -100,6 +104,7 @@ export type RenderMarkdownFragmentOptions = {
   markdown: string,
   containerClassName: string,
   contentClassName: string,
+  grammar?: Grammar,
   editorStyles?: Partial<WritableStringCSSProperties>
 };
 
@@ -108,6 +113,7 @@ RANGE.selectNode(document.body);
 
 export async function renderOverlayContent({
   markdown,
+  // grammar = undefined,
   containerClassName,
   contentClassName,
   editorStyles
@@ -186,9 +192,10 @@ export async function renderMarkdown(
           // backticks shouldn't need to be escaped. So before we invoke syntax
           // highlighting on them, we'll unescape them.
           //
-          // Luckily, this callback seems to run against both inline code and
-          // fenced code blocks. The former won’t get syntax-highlighted, but
-          // `highlightCode` will return the unescaped HTML we gave it.
+          // TODO: Sadly, this callback only seems to run against code fences,
+          // not inline code spans. But `marked` probably offers a way for me
+          // to intervene in the parsing process; just have to track it down
+          // and unescape HTML inside of inline code spans.
           let result = await highlightCode(unescapeHTML(code), grammar);
           callback(null, result);
         }

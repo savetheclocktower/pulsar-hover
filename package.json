@@ -27,32 +27,57 @@
     "atom-ide-base": "^3.3.0",
     "rollup": "^4.40.0",
     "tslib": "^2.8.1",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vscode-languageserver-protocol": "^3.17.5"
   },
   "configSchema": {
-    "showOverlayOnCursorMove": {
-      "title": "Show on Cursor Move",
-      "description": "When enabled, the hover overlay will appear when your cursor rests on a symbol. When disabled, the hover overlay won’t appear for the token under the cursor until you invoke the **Pulsar Hover: Toggle** command.",
-      "type": "boolean",
-      "default": false
+    "hover": {
+      "type": "object",
+      "collapsed": "false",
+      "properties": {
+        "showOnCursorMove": {
+          "title": "Show on Cursor Move",
+          "description": "When enabled, the hover overlay will appear when your cursor rests on a symbol. When disabled, the hover overlay won’t appear for the token under the cursor until you invoke the **Pulsar Hover: Toggle** command.",
+          "type": "boolean",
+          "default": false
+        },
+        "showOnMouseMove": {
+          "title": "Show on Mouse Move",
+          "description": "When enabled, the hover overlay will appear when the mouse pointer rests on a symbol.",
+          "type": "boolean",
+          "default": true
+        },
+        "hoverTime": {
+          "title": "Hover Delay Time",
+          "description": "How long (in milliseconds) to wait before asking for hover information on mouse or cursor rest; also how long for the hover overlay to linger after mouse or cursor movement.",
+          "type": "number",
+          "default": 250
+        }
+      }
     },
-    "showOverlayOnMouseMove": {
-      "title": "Show on Mouse Move",
-      "description": "When enabled, the hover overlay will appear when the mouse pointer rests on a symbol.",
-      "type": "boolean",
-      "default": true
-    },
-    "hoverTime": {
-      "title": "Hover Delay Time",
-      "description": "How long (in milliseconds) to wait before asking for hover information on mouse or cursor rest; also how long for the hover overlay to linger after mouse or cursor movement.",
-      "type": "number",
-      "default": 250
+    "signatureHelp": {
+      "type": "object",
+      "title": "Signature Help",
+      "collapsed": "false",
+      "properties": {
+        "showOverlayWhileTyping": {
+          "title": "Show While Typing",
+          "description": "Whether to display signature help while the user types function parameters.",
+          "type": "boolean",
+          "default": "true"
+        }
+      }
     }
   },
   "providedServices": {
     "datatip": {
       "versions": {
         "0.1.0": "provideDatatipService"
+      }
+    },
+    "signature-help": {
+      "versions": {
+        "0.1.0": "provideSignatureHelpService"
       }
     }
   },
