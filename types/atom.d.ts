@@ -1,4 +1,4 @@
-import { Disposable, Grammar } from "atom"
+import { Disposable, Grammar } from "atom";
 
 // Extensions to the types defined in `@types/atom`.
 
@@ -30,11 +30,11 @@ declare module 'atom' {
   interface HighlightIterator {
     seek(pos: { row: number; column: number }, endRow?: number): void
     getPosition(): { row: number; column: number }
-    getOpenScopeIds?(): ScopeId[]
-    getCloseScopeIds?(): ScopeId[]
+    getOpenScopeIds?(): number[]
+    getCloseScopeIds?(): number[]
     moveToSuccessor(): void
   }
-  interface ScopeId {}
+  // interface ScopeId {}
   interface TextBuffer {
     setLanguageMode(lm: LanguageMode): void
     getLanguageMode(): LanguageMode;
