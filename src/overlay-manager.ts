@@ -588,7 +588,7 @@ export default class OverlayManager {
       } else {
         highlightDecoration = editor.decorateMarker(highlightMarker, {
           type: 'highlight',
-          class: 'datatip-highlight-region'
+          class: 'hover-highlight-region'
         });
         disposables.add(
           new Disposable(() => {
