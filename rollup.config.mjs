@@ -3,16 +3,6 @@ import resolve from '@rollup/plugin-node-resolve';
 import json from '@rollup/plugin-json';
 import typescript from '@rollup/plugin-typescript';
 
-// TODO: This config is perfect except that it somehow fails to see the types
-// in the `types` folder, meaning it flags a bunch of warnings that aren't
-// actually warnings and don't appear when I run `tsc`.
-//
-// Practically speaking, this is only an annoyance, but it's a _big_ one; if
-// there's an actual error to diagnose, `npm run watch` won't surface it very
-// well since there are a bunch of other spurious warnings to sift through.
-//
-// As far as I can tell, this is a bug in `@rollup/plugin-typescript`, but I
-// can't be sure.
 export default {
   input: 'src/index.ts',
   output: {

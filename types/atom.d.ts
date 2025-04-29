@@ -6,9 +6,6 @@ declare module 'atom' {
   interface Cursor {
     editor: TextEditor
   }
-  interface TextEditor {
-    getElement(): HTMLElement
-  }
   interface TextEditorElement {
     getWidth(): number
   }
@@ -41,5 +38,6 @@ declare module 'atom' {
   }
   interface TextEditor {
     setVisible(value: boolean): void;
+    getElement(): TextEditorElement;
   }
 }

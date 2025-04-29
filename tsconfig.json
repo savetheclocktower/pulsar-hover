@@ -14,12 +14,12 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "sourceMap": true,
-    "moduleResolution": "bundler"
+    "moduleResolution": "bundler",
+    "typeRoots": [
+      "./types",
+      "./node_modules/@types"
+    ]
   },
   "include": ["src/**/*", "types/**/*"],
-  "exclude": ["node_modules", "lib"],
-  "typeRoots": [
-    "./node_modules/@types",
-    "./types"
-  ]
+  "exclude": ["node_modules", "lib"]
 }
