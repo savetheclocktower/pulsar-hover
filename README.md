@@ -26,7 +26,8 @@ In order to do this job for a given language, it needs [a consumer of `signature
 
 By default, this signature help will appear automatically when appropriate while you type, but you can configure it to appear only after the invocation of a command instead.
 
-(Eventually I’d like to create a new service to replace `signature-help` much like `hover` is designed to replace `datatip`. But that’s lower on the priority list.)
+Again, because `signature-help` inverts the consumer/provider relationship, this package prefers a new service called `signature`. When searching for a signature help provider for a particular editor pane, [`signature` providers](https://web.pulsar-edit.dev/packages?serviceType=consumed&service=signature) will be given priority over `signature-help` consumers.
+
 
 ## Commands
 
