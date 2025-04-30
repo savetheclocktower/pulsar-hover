@@ -1,7 +1,6 @@
-// Like LSP’s `MarkupContent`, but abstracts away the difference between it and
-
 import { Point, Range, TextEditor } from "atom"
 
+// Like LSP’s `MarkupContent`, but abstracts away the difference between it and
 // the deprecated `MarkedString` type.
 type HoverMarkupContent = {
   kind: 'markdown' | 'plaintext',

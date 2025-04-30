@@ -64,7 +64,15 @@
           "title": "Show While Typing",
           "description": "Whether to display signature help while the user types function parameters.",
           "type": "boolean",
-          "default": "true"
+          "default": true,
+          "order": 1
+        },
+        "includeSignatureDocumentation": {
+          "title": "Include Signature Documentation",
+          "description": "Whether the signature help overlay should include the documentation for the entire signature. If disabled, only the documentation for the active parameter will be shown.",
+          "type": "boolean",
+          "default": false,
+          "order": 2
         }
       }
     }
@@ -85,6 +93,11 @@
     "hover": {
       "versions": {
         "0.1.0": "consumeHover"
+      }
+    },
+    "signature": {
+      "versions": {
+        "0.1.0": "consumeSignature"
       }
     }
   },

@@ -27,6 +27,6 @@ export type RenderMarkdownFragmentOptions = {
     grammar?: Grammar;
     editorStyles?: Partial<WritableStringCSSProperties>;
 };
-export declare function renderOverlayContent({ markdown, containerClassName, contentClassName, editorStyles }: RenderMarkdownFragmentOptions): Promise<DocumentFragment>;
+export declare function renderOverlayContent({ markdown, containerClassName, contentClassName, editorStyles }: RenderMarkdownFragmentOptions): Promise<HTMLElement>;
 export declare function renderMarkdown(markdownText: string, domPurifyConfig?: DOMPurifyConfig): Promise<string>;
 export {};

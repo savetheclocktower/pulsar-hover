@@ -119,19 +119,19 @@ RANGE.selectNode(document.body);
 
 export async function renderOverlayContent({
   markdown,
-  // grammar = undefined,
   containerClassName,
   contentClassName,
   editorStyles
 }: RenderMarkdownFragmentOptions) {
   let html = await renderMarkdown(markdown);
   let fragment = RANGE.createContextualFragment(`
-    <atom-panel class="${containerClassName}">
-      <div class="inset-panel padded ${contentClassName}">
-        ${html}
-      </div>
-    </atom-panel>
-  `);
+    <div class="inset-panel padded ${contentClassName}">
+      ${html}
+    </div>
+  `.trim());
+
+  let panel = document.createElement('atom-panel');
+  panel.classList.add(containerClassName);
 
   // Apply style overrides to make the `pre` elements look more like the user’s
   // editor.
@@ -145,7 +145,8 @@ export async function renderOverlayContent({
     }
   }
 
-  return fragment;
+  panel.appendChild(fragment);
+  return panel;
 }
 
 export async function renderMarkdown(

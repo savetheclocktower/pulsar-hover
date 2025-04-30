@@ -1,14 +1,15 @@
 @import 'ui-variables';
 
+@reference-color: fade(@syntax-text-color, 18%);
+
 .hover-overlay-view-container {
   overflow: auto;
   max-height: 300px;
+  max-width: min(var(--text-editor-width), 50vw);
 }
 
 .hover-overlay-view {
   font-family: @font-family;
-  max-width: 50vw;
-  min-width: 200px;
 
   & > :first-child {
     margin-top: 0;
@@ -19,6 +20,14 @@
   }
 
   pre {
+    position: relative;
+
+    .highlight {
+      z-index: 0;
+      position: absolute;
+      background-color: @reference-color;
+    }
+
     // Override the standard behavior for `pre` elements in Pulsar so that
     // lines don't break in the middle of a word.
     word-break: normal;
@@ -34,22 +43,4 @@
       margin-top: 0.5rem;
     }
   }
-
-  atom-text-editor {
-    // only show scrollbars on hover
-    .scrollbars-visible-always & {
-      .vertical-scrollbar,
-      .horizontal-scrollbar {
-        visibility: hidden;
-      }
-    }
-    .scrollbars-visible-always &:hover {
-      .vertical-scrollbar,
-      .horizontal-scrollbar {
-        visibility: visible;
-      }
-    }
-    user-select: auto;
-  }
-
 }

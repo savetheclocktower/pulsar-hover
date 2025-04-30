@@ -1,6 +1,7 @@
 import {
   CompositeDisposable,
   Disposable,
+  Emitter,
   Range,
   Point,
   TextEditor,
@@ -14,11 +15,12 @@ import {
 
 import { SignatureHelpContext, SignatureHelpTriggerKind } from 'vscode-languageserver-protocol';
 
-import type { Datatip, DatatipProvider, MarkedString, Signature, SignatureParameter } from 'atom-ide-base';
+import type { Datatip, DatatipProvider, MarkedString, Signature, SignatureHelpProvider, SignatureParameter } from 'atom-ide-base';
 
-import ProviderRegistry, { AugmentedSignatureHelpProvider } from './provider-registry';
+import ProviderRegistry from './provider-registry';
 import { Timer } from './util';
 import { HoverInformation, HoverProvider } from './hover';
+import { SignatureProvider } from './signature';
 import { renderOverlayContent } from './render-markdown';
 
 // Distinguishes `Datatip` from `HoverInformation`.
@@ -73,12 +75,16 @@ type MountOverlayWithMarkerOptions = {
 type OverlayType = 'signature-help' | 'hover';
 
 export default class OverlayManager {
+  #emitter: Emitter = new Emitter();
   #subscriptions: CompositeDisposable = new CompositeDisposable();
-  #datatipRegistry: ProviderRegistry<DatatipProvider> = new ProviderRegistry();
-  #hoverRegistry: ProviderRegistry<HoverProvider> = new ProviderRegistry();
-  #signatureHelpRegistry: ProviderRegistry<AugmentedSignatureHelpProvider> = new ProviderRegistry();
 
-  #watchedEditors: WeakSet<TextEditor> = new WeakSet();
+  #datatipRegistry= new ProviderRegistry<DatatipProvider>();
+  #signatureHelpRegistry = new ProviderRegistry<SignatureHelpProvider>();
+
+  #hoverRegistry = new ProviderRegistry<HoverProvider>();
+  #signatureRegistry = new ProviderRegistry<SignatureProvider>();
+
+  #watchedEditors = new WeakSet<TextEditor>();
 
   editor: TextEditor | null = null;
   editorView: TextEditorElement | null = null;
@@ -89,6 +95,7 @@ export default class OverlayManager {
   showHoverOnCursorMove = false;
   showHoverOnMouseMove = true;
   showSignatureHelpWhileTyping = true;
+  hoverTime = atom.config.get("pulsar-hover.hover.hoverTime") as number;
 
   currentMarkerRange: Range | null = null;
   currentOverlayType?: OverlayType;
@@ -96,17 +103,29 @@ export default class OverlayManager {
   #cursorMoveTimer?: Timer;
   #mouseMoveTimer?: Timer;
 
-  hoverTime = atom.config.get("pulsar-hover.hover.hoverTime") as number;
+  _onMouseMove: (event: MouseEvent) => void;
+  _onMouseRemain: (event: MouseEvent) => void;
+  _onCursorMove: (event: CursorPositionChangedEvent) => void;
+  _onCursorRemain: (event: CursorPositionChangedEvent) => void;
 
-  _onMouseMove: (event: MouseEvent) => void
-  _onMouseRemain: (event: MouseEvent) => void
-  _onCursorRemain: (event: CursorPositionChangedEvent) => void
+  _resizeObserver: ResizeObserver
 
   constructor() {
     this.#createTimers();
     this._onMouseMove = this.onMouseMove.bind(this);
     this._onMouseRemain = this.onMouseRemain.bind(this);
+    this._onCursorMove = this.onCursorMove.bind(this);
     this._onCursorRemain = this.onCursorRemain.bind(this);
+
+    // Detect when overlays are initially visible.
+    this._resizeObserver = new ResizeObserver((entries) => {
+      let [entry] = entries;
+      requestAnimationFrame(() => {
+        this.#emitter.emit('overlay-did-show', entry.target);
+        this._resizeObserver.unobserve(entry.target);
+      });
+    });
+
     this.initialize();
   }
 
@@ -119,7 +138,8 @@ export default class OverlayManager {
 
   initialize() {
     this.#subscriptions.add(
-      atom.config.observe("pulsar-hover.hover.hoverTime", () => {
+      atom.config.observe("pulsar-hover.hover.hoverTime", (value) => {
+        this.hoverTime = value;
         this.#createTimers();
       }),
       atom.workspace.observeTextEditors((editor) => {
@@ -164,6 +184,10 @@ export default class OverlayManager {
 
   get hoverRegistry() {
     return this.#hoverRegistry;
+  }
+
+  get signatureRegistry() {
+    return this.#signatureRegistry;
   }
 
   watchEditor(editor: TextEditor) {
@@ -215,14 +239,12 @@ export default class OverlayManager {
 
     this.editorSubscriptions = new CompositeDisposable();
 
-    let onCursorMove = this.onCursorMove.bind(this);
-
     if (this.showHoverOnMouseMove) {
       this.editorView.addEventListener('mousemove', this._onMouseMove);
     }
 
     this.editorSubscriptions.add(
-      this.editor.onDidChangeCursorPosition(onCursorMove),
+      this.editor.onDidChangeCursorPosition(this._onCursorMove),
       this.editor.getBuffer().onDidChangeText((event) => {
         if (event.changes.length === 0) return;
         if (this.currentOverlayType === 'hover') {
@@ -263,13 +285,17 @@ export default class OverlayManager {
     this.overlayMarkerDisposables = null;
   }
 
-  onMouseMove(event: MouseEvent) {
-    this.#mouseMoveTimer!.schedule(event);
-  }
-
   async onCursorDidChangeSignatureHelp(event: CursorPositionChangedEvent) {
     if (event.textChanged) return;
-    if (!isTypingPairSkip(event)) return;
+    if (!isTypingPairSkip(event)) {
+      if (event.newScreenPosition.row !== event.oldScreenPosition.row) {
+        // Unmount signature help if the cursor moves up or down (fairly strong
+        // indicator the user is leaving the bounds of an argument list) but
+        // not left or right (far more ambiguous).
+        this.unmountOverlay();
+      }
+      return;
+    }
 
     let {
       newBufferPosition: newPos,
@@ -313,67 +339,82 @@ export default class OverlayManager {
     );
   }
 
-  async onTextDidChangeSignatureHelp (event: BufferStoppedChangingEvent, editor: TextEditor) {
-      let changes = filterTextChanges(event.changes)
-      if (changes.length !== 1) return;
-      let [change] = changes;
+  /**
+   * Called when text changes and we think we might be typing arguments within
+   * a function. Certain trigger characters will cause us to ask the language
+   * server for an update.
+   */
+  async onTextDidChangeSignatureHelp(
+    event: BufferStoppedChangingEvent,
+    editor: TextEditor
+  ) {
+    let changes = filterTextChanges(event.changes);
+    if (changes.length !== 1) return;
+    let [change] = changes;
 
-      // Use the start of the current selection as the cursor position.
-      // (Autocomplete often inserts a placeholder and puts the cursor at
-      // the end.)
-      let cursorPosition = editor.getSelectedBufferRange().start;
+    // Use the start of the current selection as the cursor position.
+    // (Autocomplete often inserts a placeholder and puts the cursor at
+    // the end.)
+    let cursorPosition = editor.getSelectedBufferRange().start;
 
-      if (
-        // Ignore deletions…
-        change.newText.length === 0 ||
-        // …ignore multi-line changes…
-        change.newRange.start.row !== change.newRange.end.row ||
-        // …and ignore changes that don’t cover the current cursor
-        // position.
-        !change.newRange.containsPoint(cursorPosition)
-      ) {
-        console.log('UNMOUNTED!');
-        return this.unmountOverlay();
-      }
+    if (
+      // Bail on deletions…
+      change.newText.length === 0 ||
+      // …multi-line changes…
+      change.newRange.start.row !== change.newRange.end.row ||
+      // …and changes that don’t cover the current cursor
+      // position.
+      !change.newRange.containsPoint(cursorPosition)
+    ) {
+      return this.unmountOverlay();
+    }
 
-      // The language client tells the language server about certain
-      // “trigger” characters that should automatically trigger signature
-      // help, so let’s use the character before the cursor as our trigger
-      // character.
-      let index = Math.max(
-        0,
-        cursorPosition.column - change.newRange.start.column - 1
-      );
+    // The language client tells the language server about certain
+    // “trigger” characters that should automatically trigger signature
+    // help, so let’s use the character before the cursor as our trigger
+    // character.
+    let index = Math.max(
+      0,
+      cursorPosition.column - change.newRange.start.column - 1
+    );
 
-      let provider = this.#signatureHelpRegistry.getProviderForEditor(editor);
-      if (!provider) return;
+    let provider = this.#signatureRegistry.getProviderForEditor(editor) ??
+      this.#signatureHelpRegistry.getProviderForEditor(editor);
 
-      console.log('[signature] got a provider');
+    if (!provider) return;
 
-      let potentialTriggerCharacter = change.newText[index];
-      console.log('[signature] potentialTriggerCharacter:', potentialTriggerCharacter, change, event.changes);
+    let potentialTriggerCharacter = change.newText[index];
 
-      let alreadyOpen = this.currentOverlayType === 'signature-help';
+    let alreadyOpen = this.currentOverlayType === 'signature-help';
 
-      if (
-        // Make a new signature help request if we just typed a trigger
-        // character…
-        provider.triggerCharacters?.has(potentialTriggerCharacter) === true ||
-        // …or if we just typed a retrigger character _and_ the overlay was
-        // already open…
-        (provider.retriggerCharacters?.has(potentialTriggerCharacter) && alreadyOpen) // ||
-        // // …or it should not
-        // // get dismissed just because we typed a space character.
-        // !(/\S/).test(change.newText) && alreadyOpen
-      ) {
-        let context = buildSignatureHelpContext('triggered', {
-          character: potentialTriggerCharacter,
-          isRetrigger: this.currentOverlayType === 'signature-help'
-        });
-        await this.showSignatureHelp(provider, editor, cursorPosition, context);
-      }
+    if (
+      // Make a new signature help request if we just typed a trigger
+      // character…
+      provider.triggerCharacters?.has(potentialTriggerCharacter) === true ||
+      // …or if we just typed a retrigger character _and_ the overlay was
+      // already open.
+      (
+        isSignatureProvider(provider) &&
+        provider.retriggerCharacters?.has(potentialTriggerCharacter) &&
+        alreadyOpen
+      )
+    ) {
+      let context = buildSignatureHelpContext('triggered', {
+        character: potentialTriggerCharacter,
+        isRetrigger: this.currentOverlayType === 'signature-help'
+      });
+      await this.showSignatureHelp(provider, editor, cursorPosition, context);
+    }
   }
 
+  onMouseMove(event: MouseEvent) {
+    this.#mouseMoveTimer!.schedule(event);
+  }
+
+  /**
+   * Called after the mouse pointer has remained in the exact same place for at
+   * least the configured interval.
+   */
   async onMouseRemain(event: MouseEvent) {
     if (this.editorView === null || this.editor === null) return;
 
@@ -390,10 +431,7 @@ export default class OverlayManager {
     // the mouse event occurred quite far away from where the text ends on
     // that row. Don't show the overlay in such situations, and hide any
     // existing overlays.
-    //
-    // @ts-ignore Internal API
     if (distance >= this.editor.getDefaultCharWidth()) {
-      console.log('hiding!');
       if (this.currentOverlayType === 'hover') {
         return this.unmountOverlay();
       }
@@ -409,6 +447,10 @@ export default class OverlayManager {
     this.#cursorMoveTimer!.schedule(event);
   }
 
+  /**
+   * Called after a cursor has stayed in one place for at least the configured
+   * interval.
+   */
   async onCursorRemain(event: CursorPositionChangedEvent) {
     if (event.textChanged) return;
 
@@ -428,19 +470,16 @@ export default class OverlayManager {
     let editor = event.cursor.editor as TextEditor;
     let position = event.cursor.getBufferPosition();
 
-    if (!this.currentMarkerRange?.containsPoint(position)) {
+    if (!this.currentMarkerRange?.containsPoint(position) && this.showHoverOnCursorMove) {
       await this.showHoverOverlay(editor, position);
     }
   }
 
-  #getEditorBackgroundColor (editor: TextEditor) {
-    // Grab the background color of the editor so we can match it when
-    // rendering code blocks in the overlay.
-    let el = editor.getElement();
-    let editorStyles = getComputedStyle(el);
-    return editorStyles.backgroundColor;
-  }
-
+  /**
+   * Attempt to show hover information at the given buffer position. Identifies
+   * a provider, asks it for information, and displays what it gets in return,
+   * if anything.
+   */
   async showHoverOverlay(editor: TextEditor, position: Point) {
     try {
       // Grab the background color of the editor so we can match it when
@@ -493,26 +532,23 @@ export default class OverlayManager {
 
         if (result) {
           let { contents } = result;
-          element = document.createElement('div');
-          element.appendChild(
-            await renderOverlayContent({
-              markdown: contents.value,
-              containerClassName: 'hover-overlay-view-container',
-              contentClassName: 'hover-overlay-view',
-              editorStyles: {
-                backgroundColor: editorBackgroundColor,
-                fontFamily: atom.config.get('editor.fontFamily'),
-                fontSize: `${atom.config.get('editor.fontSize')}px`
-              }
-            })
-          );
+          element = await renderOverlayContent({
+            markdown: contents.value,
+            containerClassName: 'hover-overlay-view-container',
+            contentClassName: 'hover-overlay-view',
+            editorStyles: {
+              backgroundColor: editorBackgroundColor,
+              fontFamily: atom.config.get('editor.fontFamily'),
+              fontSize: `${atom.config.get('editor.fontSize')}px`
+            }
+          });
         }
       }
 
       let width = (editor.getElement() as TextEditorElement).getWidth();
 
       if (element) {
-        element.style.maxWidth = `${width}px`;
+        element.style.setProperty('--text-editor-width', `${width}px`);
         this.overlayMarkerDisposables = this.mountOverlayWithMarker(
           editor,
           this.currentMarkerRange!,
@@ -544,17 +580,25 @@ export default class OverlayManager {
     let editor = event.currentTarget.getModel();
     if (!atom.workspace.isTextEditor(editor)) return;
 
-    let position = editor.getCursorBufferPosition();
-    let isTooltipOpenForPosition = this.currentMarkerRange?.containsPoint(position);
-    if (isTooltipOpenForPosition === true && this.currentOverlayType === 'signature-help') {
+    // Since we don't get a range from the language server when we first show
+    // the signature help overlay, it's tricker to figure out whether we should
+    // open a new one or close one that may already be open.
+    //
+    // Instead we'll make it so that invoking this command while a signature
+    // help overlay is open _always_ closes it; the user would then have to
+    // invoke it again in order to show a new signature help overlay at their
+    // current position. This feels like a pretty rare use case, so I'm OK with
+    // this.
+    if (this.currentOverlayType === 'signature-help') {
       return this.unmountOverlay();
     }
 
+    // Otherwise let's ask the provider for a new signature help overlay.
+    let position = editor.getCursorBufferPosition();
     let provider = this.#signatureHelpRegistry.getProviderForEditor(editor);
     if (!provider) return;
 
     let context = buildSignatureHelpContext('invoked', { isRetrigger: false });
-
     await this.showSignatureHelp(provider, editor, position, context);
   }
 
@@ -679,13 +723,15 @@ export default class OverlayManager {
    * @param context The context data to pass to the language server.
    */
   async showSignatureHelp (
-    provider: AugmentedSignatureHelpProvider,
+    provider: SignatureHelpProvider | SignatureProvider,
     editor: TextEditor,
     position: Point,
     context?: SignatureHelpContext
   ) {
     try {
-      let signatureHelp = await provider.getSignatureHelp(editor, position, context);
+      let signatureHelp = isSignatureProvider(provider) ?
+        await provider.getSignature(editor, position, context) :
+        await provider.getSignatureHelp(editor, position);
 
       this.unmountOverlay();
 
@@ -700,49 +746,36 @@ export default class OverlayManager {
       let paramIndex = signatureHelp.activeParameter ?? 0;
       let parameter = signature.parameters?.[paramIndex] ?? null;
 
-      let doc = ``;
+      let markdown = ``;
+      let highlight: [number, number] | null = null;
 
-      // TODO: VS Code’s presentation of this data is arguably more helpful:
-      // instead of displaying just one parameter at a time in the signature,
-      // they display the _entire_ signature and highlight the active parameter
-      // within it.
-      //
-      // But because we are doing syntax highlighting within code blocks, this
-      // is tricky! We could do one of two things:
-      //
-      // * Abandon syntax highlighting for this presentation and instead format
-      //   the signatures in plaintext, thus making it easier to wrap our
-      //   desired regions in `span`s;
-      // * Figure out how to include marker information within our headless
-      //   syntax highlighting strategy so that we can include that data when
-      //   turning our `HighlightIterator` into `span`s. (In theory, this could
-      //   be tricky, but the ranges identified by the language server would be
-      //   extremely unlikely to straddle scope boundaries in weird ways).
-      //
-      // Either way, this is a task for later.
       if (parameter) {
-        doc = buildParameterDocumentation(parameter, signature, grammarName);
+        let result = buildParameterDocumentation(parameter, signature, grammarName, {
+          includeSignatureDocumentation: atom.config.get(`pulsar-hover.signatureHelp.includeSignatureDocumentation`)
+        });
+        markdown = result.markdown;
+        highlight = result.highlight;
       } else if (signature.documentation != null) {
-        doc = buildSignatureDocumentation(signature, grammarName);
+        markdown = buildSignatureDocumentation(signature, grammarName);
       }
 
-      let element = document.createElement('div');
-      element.appendChild(
-        await renderOverlayContent({
-          markdown: doc,
-          containerClassName: 'hover-overlay-view-container',
-          contentClassName: 'hover-overlay-view',
-          editorStyles: {
-            backgroundColor: this.#getEditorBackgroundColor(editor),
-            fontFamily: atom.config.get('editor.fontFamily'),
-            fontSize: `${atom.config.get('editor.fontSize')}px`
-          }
-        })
-      );
+      if (!markdown) return;
+
+      let element = await renderOverlayContent({
+        markdown,
+        containerClassName: 'hover-overlay-view-container',
+        contentClassName: 'hover-overlay-view',
+        editorStyles: {
+          backgroundColor: this.#getEditorBackgroundColor(editor),
+          fontFamily: atom.config.get('editor.fontFamily'),
+          fontSize: `${atom.config.get('editor.fontSize')}px`
+        }
+      });
 
       let width = (editor.getElement() as TextEditorElement).getWidth();
-      element.style.maxWidth = `${width}px`;
+      element.style.setProperty('--text-editor-width', `${width}px`);
 
+      this.currentMarkerRange = new Range(position, position);
       this.overlayMarkerDisposables = this.mountOverlayWithMarker(
         editor, null, position, element,
         {
@@ -752,22 +785,263 @@ export default class OverlayManager {
           markerPosition: 'tail'
         }
       );
+
+      if (highlight) {
+        this._resizeObserver.observe(element);
+        // We can't draw the highlights on screen until the overlay is
+        // rendered, so we'll wait.
+        this.onOverlayVisible(() => {
+          this.#drawHighlight(element, highlight);
+        });
+      }
     } catch (err) {
       console.error(err);
     }
   }
+
+  /**
+   * Fires a callback once the next time any overlay is visible.
+   */
+  onOverlayVisible (callback) {
+    return this.#emitter.once('overlay-did-show', callback);
+  }
+
+  /**
+   * Grab the background color of the editor so we can match it when rendering
+   * code blocks in the overlay.
+   */
+  #getEditorBackgroundColor (editor: TextEditor) {
+    let el = editor.getElement();
+    let editorStyles = getComputedStyle(el);
+    return editorStyles.backgroundColor;
+  }
+
+  /**
+   * Highlight a substring of a method signature.
+   */
+  #drawHighlight (element: HTMLElement, highlight: [number, number]) {
+    // TODO: Ugly. Refactor.
+    let code = element.querySelector('pre > code') as HTMLPreElement | null;
+    if (!code) return;
+
+    let textNodes = collectTextNodes(element);
+    if (textNodes.length === 0) return;
+    while (!textNodes[0]?.textContent?.match(/\S/)) {
+      textNodes.shift();
+    }
+
+    let [start, end] = highlight;
+
+    // Borrow a technique from `TextEditorComponent`: collect all the text
+    // nodes in order, then step through them until you find the bounds of what
+    // you want to highlight. Turn that into a set of `DOMRect`s via
+    // `Range::getClientRects()` (DOM `Range`, not Atom `Range`), then turn
+    // those `DOMRect`s into `span`s.
+    let startIndex = 0;
+    let endIndex = 0;
+    let startDelta = 0;
+    let endDelta = 0;
+    let targetStartNode: Text | null = null;
+    let targetEndNode: Text | null = null;
+
+    let i = 0;
+    // Find our starting text node and offset.
+    for (; i < textNodes.length; i++) {
+      let textNode = textNodes[i];
+      let len = textNode.textContent?.length ?? 0;
+      if (startIndex + len >= start) {
+        startDelta = start - startIndex;
+        targetStartNode = textNode;
+        break;
+      }
+      startIndex += len;
+    }
+
+    endIndex = startIndex;
+    // Continuing where we left off, find our ending text node and offset.
+    for (; i < textNodes.length; i++) {
+      let textNode = textNodes[i];
+      let len = textNode.textContent?.length ?? 0;
+      if (endIndex + len >= end) {
+        endDelta = end - endIndex;
+        targetEndNode = textNode;
+        break;
+      }
+      endIndex += len;
+    }
+
+    if (!targetStartNode || !targetEndNode) return;
+
+    // Set the range bounds…
+    let range = document.createRange();
+    range.setStart(targetStartNode, startDelta);
+    range.setEnd(targetEndNode, endDelta);
+
+    // …then turn them into `DOMRect`s.
+    let rects = range.getClientRects();
+    if (!rects.length) return;
+
+    // All these `DOMRect`s give coordinates relative to the viewport. But we
+    // want to position them relative to the containing `pre` element, so we
+    // grab its `DOMRect` in order to calculate relative offsets.
+    if (!code.parentNode) return;
+    let pre = code.parentNode as HTMLPreElement;
+    let preRect = pre.getBoundingClientRect();
+
+    // Since there are lots of `span`s involved due to all the syntax
+    // highlighting, we might get lots of `DOMRect`s. So we'll consolidate and
+    // merge overlapping `DOMRect`s to minimize the number of `spans` we
+    // create.
+    let consolidatedRects = consolidateClientRects(Array.from(rects));
+
+    // `DOMRect`s for text are too stubby; we want to use the height of the
+    // line rather than the actual height of the drawn text.
+    let codeLineHeight = getComputedStyle(code).lineHeight;
+    let lineHeight = parseFloat(codeLineHeight);
+    if (isNaN(lineHeight)) {
+      // But we'll fall back to the height of the drawn text if `line-height`
+      // is somehow invalid.
+      lineHeight = rects[0].height;
+    }
+
+    let highlightElements = consolidatedRects.map((rect) => {
+      let style = {
+        // Relative to the top-left corner of the `pre`, but adjust for border
+        // width/height (which is accounted for in `getBoundingClientRect` but
+        // not in the positioning context)… and compensate for line height.
+        top: rect.top - pre.clientTop - preRect.top + rect.height - lineHeight,
+        left: rect.left - pre.clientLeft - preRect.left,
+        height: lineHeight,
+        width: rect.width
+      };
+
+      let span = document.createElement('span');
+      span.classList.add('highlight');
+      span.style.top = `${style.top}px`;
+      span.style.left = `${style.left}px`;
+      span.style.width = `${style.width}px`;
+      span.style.height = `${style.height}px`;
+
+      return span;
+    });
+
+    for (let highlightElement of highlightElements) {
+      code.parentNode?.appendChild(highlightElement)
+    }
+  }
 }
 
-function interpretParameterLabel (label: SignatureParameter['label'], signature: Signature) {
-  if (typeof label === 'string') return label;
-  return signature.label.substring(label[0], label[1]);
+/**
+ * Given an element, collects all its individual text nodes regardless of depth
+ * and returns them in document order.
+ */
+function collectTextNodes (element: HTMLElement) {
+  function collect(element: HTMLElement, existingResult: Text[]) {
+    for (let i = 0; i < element.childNodes.length; i++) {
+      let node = element.childNodes[i];
+      if (node.nodeType === Node.TEXT_NODE) {
+        existingResult.push(node as Text);
+      } else if (node.childNodes) {
+        collect(node as HTMLElement, existingResult);
+      }
+    }
+  }
+
+  let result: Text[] = [];
+  collect(element, result);
+  return result;
+}
+
+
+/**
+ * Indicates whether two `DOMRect`s overlap.
+ */
+function rectsOverlap(rectA, rectB) {
+  if (rectA.right < rectB.left) return false;
+  if (rectA.left > rectB.right) return false;
+  if (rectA.top > rectB.bottom) return false;
+  if (rectA.bottom < rectB.top) return false;
+  return true;
+}
+
+type DOMRectLike = {
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  top: number,
+  left: number,
+  bottom: number,
+  right: number
+};
+
+/**
+ * Given two `DOMRect`s that overlap, merge them into a pseudo-`DOMRect` that
+ * represents the larger area.
+ */
+function mergeOverlappingRects(rectA: DOMRectLike, rectB: DOMRectLike): DOMRectLike {
+  let x = Math.min(rectA.x, rectB.x);
+  let y = Math.min(rectA.top, rectB.top);
+  let left = Math.min(rectA.left, rectB.left);
+  let right = Math.max(rectA.right, rectB.right);
+  let width = right - left;
+  let top = Math.min(rectA.top, rectB.top);
+  let bottom = Math.max(rectA.bottom, rectB.bottom);
+  let height = bottom - top;
+
+  return { x, y, left, right, width, top, bottom, height };
+}
+
+/**
+ * Given any number of `DOMRect`s that might overlap, consolidate them into a
+ * discrete number of `DOMRect`s that do not overlap.
+ */
+function consolidateClientRects(clientRects: DOMRectLike[]): DOMRectLike[] {
+  let results: DOMRectLike[] = [];
+  // This technique only works if the rects are sorted such that any two rects
+  // that overlap are adjacent in the list.
+  clientRects.sort((a, b) => {
+    if (a.top !== b.top) return a.top - b.top;
+    if (a.left !== b.left) return a.left - b.left;
+    return 0;
+  })
+  for (let i = 0; i < clientRects.length; i++) {
+    let rect = clientRects[i];
+    let previousRect = results[results.length - 1];
+    if (previousRect && rectsOverlap(previousRect, rect)) {
+      results[results.length - 1] = mergeOverlappingRects(previousRect, rect);
+    } else {
+      results.push(rect);
+    }
+  }
+  return results;
+}
+
+/**
+ * Determine a parameter’s description by either using the string given
+ * or taking the specified substring from the signature.
+ */
+function interpretParameterLabel (label: SignatureParameter['label'], signature: Signature): { label: string, highlight: [number, number] | null } {
+  if (typeof label === 'string') {
+    if (signature.label && signature.label.includes(label)) {
+      let start = signature.label.indexOf(label);
+      let end = start + label.length;
+      // Return the whole signature's label and the bounds of the highlight.
+      return { label: signature.label, highlight: [start, end] };
+    }
+    // Return only the parameter label.
+    return { label, highlight: null };
+  }
+  return { label: signature.label, highlight: label };
 }
 
 function buildFencedCodeBlock (value: string, grammarName?: string) {
   return `\`\`\`${grammarName ?? ''}\n${value}\n\`\`\`\n`
 }
 
-function buildParameterDocumentation (parameter: SignatureParameter, signature: Signature, grammarName: string = '') {
+function buildParameterDocumentation (parameter: SignatureParameter, signature: Signature, grammarName: string = '', {
+  includeSignatureDocumentation = false
+}: { includeSignatureDocumentation?: boolean } = {}) {
   let doc;
   if (parameter.documentation == null) {
     doc = '';
@@ -777,15 +1051,22 @@ function buildParameterDocumentation (parameter: SignatureParameter, signature: 
     doc = parameter.documentation.value;
   }
 
-  let label = interpretParameterLabel(parameter.label, signature);
+  let { label, highlight } = interpretParameterLabel(parameter.label, signature);
 
   let signatureLabel = buildSignatureDocumentation(signature) ?? '';
 
-  if (signatureLabel) {
+  // When the signature has its own documentation, we can place it below the
+  // parameter’s documentation with a horizontal rule as a separator.
+  if (signatureLabel && includeSignatureDocumentation) {
     signatureLabel = `\n\n---\n\n${signatureLabel}`;
+  } else {
+    signatureLabel = '';
   }
 
-  return `${buildFencedCodeBlock(label, grammarName)}\n${doc}${signatureLabel}`;
+  return {
+    markdown: `${buildFencedCodeBlock(label, grammarName)}\n${doc}${signatureLabel}`,
+    highlight
+  }
 }
 
 function buildSignatureDocumentation (signature: Signature, _grammarName?: string) {
@@ -800,7 +1081,17 @@ function buildSignatureDocumentation (signature: Signature, _grammarName?: strin
   return doc;
 }
 
+/**
+ * Informal type corresponding to the three ways signature help can be
+ * triggered.
+ */
+// TODO: Investigate `content-changed`; not clear on that one and we don’t use
+// it yet.
 type TriggerKind = 'triggered' | 'invoked' | 'content-changed';
+
+/**
+ * Build a `SignatureHelpContext` as described by the LSP spec.
+ */
 function buildSignatureHelpContext (mode: TriggerKind, {
   character,
   isRetrigger = false
@@ -816,6 +1107,7 @@ function buildSignatureHelpContext (mode: TriggerKind, {
     case 'content-changed':
       triggerKind = SignatureHelpTriggerKind.ContentChange;
   }
+  // TODO: `activeSignatureHelp`?
   let context: SignatureHelpContext = { triggerKind, isRetrigger };
   if (character != null) {
     context.triggerCharacter = character;
@@ -824,7 +1116,6 @@ function buildSignatureHelpContext (mode: TriggerKind, {
 }
 
 function isEmptyTextChange (change: TextChange) {
-  console.log('isEmpty?', change);
   return change.oldText === change.newText;
 }
 
@@ -832,11 +1123,25 @@ function filterTextChanges (changes: BufferStoppedChangingEvent['changes']) {
   return changes.filter((change) => !isEmptyTextChange(change));
 }
 
+/**
+ * Determines whether a cursor position change is likely the equivalent of
+ * the user having typed the second of a typing pair.
+ */
 function isTypingPairSkip (event: CursorPositionChangedEvent) {
   let { newBufferPosition: newPos, oldBufferPosition: oldPos } = event;
   if (newPos.row !== oldPos.row) return false;
   if (oldPos.column + 1 !== newPos.column) return false;
   let range = new Range(oldPos, newPos);
   let text = event.cursor.editor.getTextInBufferRange(range);
-   return /[\]\)\}'"]/.test(text);
+   return /[\]\)\}>'"]/.test(text);
 }
+
+/**
+ * Distinguishes `SignatureProvider` from `SignatureHelpProvider`.
+ */
+function isSignatureProvider (provider: SignatureHelpProvider | SignatureProvider | null): provider is SignatureProvider {
+  if (provider == null) return false;
+  return ('getSignature' in provider);
+}
+
+console.log()
