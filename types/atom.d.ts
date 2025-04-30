@@ -39,5 +39,6 @@ declare module 'atom' {
   interface TextEditor {
     setVisible(value: boolean): void;
     getElement(): TextEditorElement;
+    getDefaultCharWidth(): number;
   }
 }
