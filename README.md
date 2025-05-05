@@ -3,7 +3,7 @@
 Contextual hints for Pulsar.
 
 <p>
-  <img width="520" alt="pulsar-hover screenshot" src="./docs/screenshot.png" />
+  <img width="520" alt="pulsar-hover screenshot" src="https://raw.githubusercontent.com/savetheclocktower/pulsar-hover/main/docs/screenshot.png" />
 </p>
 
 Designed as a replacement for both `atom-ide-datatip` and `atom-ide-signature-help`.
