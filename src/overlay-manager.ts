@@ -619,10 +619,16 @@ export default class OverlayManager {
     let overlayDecoration: Decoration | undefined = undefined;
 
     if (highlight) {
-      let highlightMarker = editor.markBufferRange(range ?? new Range(position, position), { invalidate: 'never' });
+      let highlightMarker = editor.markBufferRange(
+        range ?? new Range(position, position),
+        { invalidate: 'never' }
+      );
 
       let decorations = editor.getOverlayDecorations().filter((decoration) => {
-        return decoration.isType('highlight') && decoration.getMarker().compare(highlightMarker) === 1;
+        return (
+          decoration.isType('highlight') &&
+          decoration.getMarker().compare(highlightMarker) === 1
+        );
       });
 
       if (decorations.length > 0) {

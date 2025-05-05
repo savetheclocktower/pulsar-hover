@@ -1,11 +1,10 @@
+// Thrown together to describe the exact surface area of the `marked` API we
+// use.
+//
+// When Pulsar upgrades to Electron 30+, we can upgrade our `marked` version
+// and consume a proper .d.ts.
+
 declare module 'marked' {
-
-  // Thrown together to describe the exact surface area of the `marked` API we
-  // use.
-  //
-  // When Pulsar upgrades to Electron 30+, we can upgrade our `marked` version
-  // and consume a proper .d.ts.
-
   /**
    * Compiles markdown to HTML asynchronously.
    */
