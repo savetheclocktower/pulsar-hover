@@ -1,6 +1,6 @@
 {
   "name": "pulsar-hover",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Contextual hints for Pulsar",
   "source": "src/index.js",
   "main": "lib/index.js",
