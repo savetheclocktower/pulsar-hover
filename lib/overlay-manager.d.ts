@@ -1,5 +1,5 @@
 import { CompositeDisposable, Disposable, Range, Point, TextEditor, TextEditorElement, CommandEvent, CursorPositionChangedEvent, BufferStoppedChangingEvent } from 'atom';
-import { SignatureHelpContext } from 'vscode-languageserver-protocol';
+import type { SignatureHelpContext } from 'vscode-languageserver-protocol';
 import type { DatatipProvider, SignatureHelpProvider } from 'atom-ide-base';
 import ProviderRegistry from './provider-registry';
 import { HoverProvider } from './hover';
