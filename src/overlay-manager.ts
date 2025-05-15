@@ -13,14 +13,14 @@ import {
   TextChange
 } from 'atom';
 
-import { SignatureHelpContext, SignatureHelpTriggerKind } from 'vscode-languageserver-protocol';
+import type { SignatureHelpContext } from 'vscode-languageserver-protocol';
 
 import type { Datatip, DatatipProvider, MarkedString, Signature, SignatureHelpProvider, SignatureParameter } from 'atom-ide-base';
 
 import ProviderRegistry from './provider-registry';
 import { Timer } from './util';
 import { HoverInformation, HoverProvider } from './hover';
-import { SignatureProvider } from './signature';
+import { SignatureProvider, SignatureHelpTriggerKind } from './signature';
 import { renderOverlayContent } from './render-markdown';
 
 // Distinguishes `Datatip` from `HoverInformation`.
