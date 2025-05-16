@@ -131,18 +131,29 @@ export async function renderOverlayContent({
   `.trim());
 
   let panel = document.createElement('atom-panel');
-  panel.classList.add(containerClassName);
+  panel.classList.add(containerClassName, 'bordered');
 
   // Apply style overrides to make the `pre` elements look more like the user’s
   // editor.
+  let codeElementsInsidePres = Array.from(fragment.querySelectorAll('pre > code'));
   if (editorStyles) {
-    let codeElementsInsidePres = fragment.querySelectorAll('pre > code');
-    for (let code of Array.from(codeElementsInsidePres)) {
+    for (let code of codeElementsInsidePres) {
       let pre = code.parentNode as HTMLPreElement;
       for (let property in editorStyles) {
         pre.style[property as keyof WritableStringCSSProperties] = editorStyles[property as keyof WritableStringCSSProperties];
       }
     }
+  }
+
+  // Until we can fix this earlier in the process, we have to undo the broad
+  // HTML escaping we did when converting to Markdown. We were able to do this
+  // for code blocks within `renderMarkdown`, but now we have to do the same
+  // for inline `code` blocks _not_ within `pre` tags.
+  for (let code of Array.from(fragment.querySelectorAll('code'))) {
+    if (codeElementsInsidePres.includes(code)) continue;
+    // `innerHTML` expects entity-escaping and `textContent` doesn't add any
+    // escaping, so this has the effect of undoing one level of escaping.
+    code.innerHTML = code.textContent ?? '';
   }
 
   panel.appendChild(fragment);
