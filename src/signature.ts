@@ -21,7 +21,7 @@ export type SignatureProvider = {
  * @since 3.15.0
  *
  * Vendored from https://github.com/microsoft/vscode-languageserver-node/blob/0ab5533f2effb0cf1b146beaa0a716bcfb9f10f4/protocol/src/common/protocol.ts#L2961
- * to avoid runtime dependency on it's source package.
+ * to avoid runtime dependency on its source package.
  *
  * Copyright (c) Microsoft Corporation (MIT Licensed)
  */
