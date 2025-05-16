@@ -808,7 +808,7 @@ export default class OverlayManager {
   /**
    * Fires a callback once the next time any overlay is visible.
    */
-  onOverlayVisible (callback) {
+  onOverlayVisible (callback: () => void) {
     return this.#emitter.once('overlay-did-show', callback);
   }
 
@@ -962,7 +962,7 @@ function collectTextNodes (element: HTMLElement) {
 /**
  * Indicates whether two `DOMRect`s overlap.
  */
-function rectsOverlap(rectA, rectB) {
+function rectsOverlap(rectA: DOMRectLike, rectB: DOMRectLike) {
   if (rectA.right < rectB.left) return false;
   if (rectA.left > rectB.right) return false;
   if (rectA.top > rectB.bottom) return false;

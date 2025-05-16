@@ -78,6 +78,6 @@ export default class OverlayManager {
     /**
      * Fires a callback once the next time any overlay is visible.
      */
-    onOverlayVisible(callback: any): Disposable;
+    onOverlayVisible(callback: () => void): Disposable;
 }
 export {};
