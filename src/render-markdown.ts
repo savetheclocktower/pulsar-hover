@@ -6,6 +6,10 @@ marked.setOptions({ breaks: false })
 
 export type DOMPurifyConfig = Omit<DOMPurify.Config, "RETURN_DOM" | "RETURN_DOM_FRAGMENT" | "RETURN_TRUSTED_TYPE"> & { PARSER_MEDIA_TYPE: DOMParserSupportedType | null }
 
+async function wait (ms: number) {
+  return new Promise<void>(r => setTimeout(r, ms));
+}
+
 function grammarForLanguageString (languageString: string) {
   if (languageString.includes('.')) {
     return atom.grammars.grammarForScopeName(languageString);
@@ -34,6 +38,22 @@ async function tokenized(lm: LanguageMode) {
   })
 }
 
+// How long we allow highlighting to monopolize the process before yielding.
+const HIGHLIGHT_TASK_MAX_TIME_MS = 3
+
+// This is an elegant (compared to alternatives) way of highlighting code that
+// was discovered by the Atom-IDE folks. It bypasses `TextEditor` altogether
+// and instead manually drives a `HighlightIterator`, producing output that is
+// quite similar to what we'd get within `TextEditor`.
+//
+// It's handy to avoid creating a `TextEditor` because (a) we'd have to deal
+// with soft-wrapping, which isn't a concern in a non-editor context; (b)
+// `TextEditor`s try to highlight only the areas that are shown on screen, so
+// they can't easily be driven in a "headless" manner.
+//
+// In the general case, this approach will occasionally yield control so as
+// not to lock up the renderer process. But for our purposes, the snippets
+// being highlighted are so small that this tends not to happen.
 async function highlightCode(source: string, grammar: Grammar) {
   let buffer = new TextBuffer();
   try {
@@ -49,16 +69,28 @@ async function highlightCode(source: string, grammar: Grammar) {
     let pos = { row: 0, column: 0 };
     iter.seek(pos, end.row);
     let output = [];
-    while (pos.row < end.row || (pos.row === end.row && pos.column <= end.column)) {
-      output.push(
-        ...iter.getCloseScopeIds().map(() => '</span>'),
-        ...iter.getOpenScopeIds().map(id => `<span class="${languageMode.classNameForScopeId(id)}">`)
-      );
-      iter.moveToSuccessor();
-      let nextPos = iter.getPosition();
-      output.push(escapeHTML(buffer.getTextInRange([pos, nextPos])));
-      // TODO: Yield?
-      pos = nextPos;
+
+    let isDone = () => pos.row > end.row || (pos.row === end.row && pos.column >= end.column);
+
+    while (!isDone()) {
+      // Work in chunks of `HIGHLIGHT_TASK_MAX_TIME_MS` milliseconds each,
+      // roughly. We don't expect to hit this limit very often, but it's useful
+      // to have it here to guard against edge cases.
+      let jobStopTime = performance.now() + HIGHLIGHT_TASK_MAX_TIME_MS;
+      while (performance.now() < jobStopTime && !isDone()) {
+        output.push(
+          ...iter.getCloseScopeIds().map(() => '</span>'),
+          ...iter.getOpenScopeIds().map(id => `<span class="${languageMode.classNameForScopeId(id)}">`)
+        );
+        iter.moveToSuccessor();
+        let nextPos = iter.getPosition();
+        output.push(escapeHTML(buffer.getTextInRange([pos, nextPos])));
+        pos = nextPos;
+      }
+      if (!isDone()) {
+        // Yield before starting another job.
+        await wait(0);
+      }
     }
     return output.join('');
   } finally {
@@ -124,6 +156,10 @@ export async function renderOverlayContent({
   editorStyles
 }: RenderMarkdownFragmentOptions) {
   let html = await renderMarkdown(markdown);
+  if (html === '') {
+    // Sometimes a Markdown string can produce empty HTML output.
+    return null;
+  }
   let fragment = RANGE.createContextualFragment(`
     <div class="inset-panel padded ${contentClassName}">
       ${html}
@@ -185,12 +221,13 @@ export async function renderMarkdown(
       // It’s not clear in context who’s doing the escaping — whether it’s the
       // language server’s job or the consumer’s job. But in practice, I’ve
       // routinely encountered unescaped HTML in contexts that are clearly
-      // _use_ rather than _mention_. (For instance, prose that makes reference
+      // _mention_ rather than _use_. (For instance, prose that makes reference
       // to a <pre> element rather than actually wanting to render a `pre`.)
       //
       // Those are bog-standard examples of situations where you _must_ escape
       // HTML. The only reason you’d neglect to do so as a language server
-      // author is if you thought it was the consumer’s job. So I guess that
+      // author is if you thought it was guaranteed to be rendered in a context
+      // where bare markup would not be parsed as markup. So I guess that
       // answers that question.
       //
       // Microsoft themselves are apparently confused about this. Because

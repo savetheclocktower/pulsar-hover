@@ -542,6 +542,7 @@ export default class OverlayManager {
               fontSize: `${atom.config.get('editor.fontSize')}px`
             }
           });
+          if (!element) return;
         }
       }
 
@@ -792,6 +793,7 @@ export default class OverlayManager {
           fontSize: `${atom.config.get('editor.fontSize')}px`
         }
       });
+      if (!element) return;
 
       let width = (editor.getElement() as TextEditorElement).getWidth();
       element.style.setProperty('--text-editor-width', `${width}px`);
