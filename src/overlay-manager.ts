@@ -537,7 +537,6 @@ export default class OverlayManager {
             containerClassName: 'hover-overlay-view-container',
             contentClassName: 'hover-overlay-view',
             editorStyles: {
-              backgroundColor: editorBackgroundColor,
               fontFamily: atom.config.get('editor.fontFamily'),
               fontSize: `${atom.config.get('editor.fontSize')}px`
             }
@@ -788,7 +787,6 @@ export default class OverlayManager {
         containerClassName: 'hover-overlay-view-container',
         contentClassName: 'hover-overlay-view',
         editorStyles: {
-          backgroundColor: this.#getEditorBackgroundColor(editor),
           fontFamily: atom.config.get('editor.fontFamily'),
           fontSize: `${atom.config.get('editor.fontSize')}px`
         }
